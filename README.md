@@ -1,10 +1,12 @@
 # AI_Language
 
-A compressed language protocol for efficient AI-to-AI agent communication. Replaces natural language with structured minimal syntax, achieving **40.7% token reduction** (measured with GPT-4o tokenizer).
+A compressed language protocol for inter-agent communication in LLM API-based multi-agent systems.
+Replaces natural language with structured minimal syntax, **reducing token usage by 40%**.
 
-## Why?
+## What is this?
 
-Multi-agent systems where AI agents communicate via natural language waste tokens on filler words, sentence structure, and redundant context. AI_Language eliminates this overhead:
+When multiple AI agents collaborate, they waste tokens communicating in natural language.
+AI_Language is a **compressed message format + parser library + routing runtime** for agent-to-agent communication.
 
 ```
 Natural Language (19 tokens):
@@ -14,13 +16,41 @@ AI_Language (4 tokens):
 ACK:#msg42
 ```
 
+## Where to use it
+
+Use AI_Language in **multi-agent backends that directly call LLM APIs**.
+
+```
+User → Your Server → [Agent A] ←AI_Language→ [Agent B]
+                          ↑                        ↑
+                  Claude/GPT API call      Claude/GPT API call
+                  System prompt:           System prompt:
+                  "Respond in AI_Language"  "Respond in AI_Language"
+```
+
+You control the system prompts. You instruct each agent to communicate using AI_Language format. The parser library on your server encodes/decodes messages between structured objects and AI_Language strings.
+
+### Good use cases
+
+| Use Case | Example |
+|----------|---------|
+| **Automation Pipelines** | Code analysis agent → Refactoring agent → Testing agent |
+| **Game AI Servers** | NPC agents exchanging tactical information |
+| **Data Processing** | ETL → Analysis → Reporting agent chain |
+| **DevOps Orchestration** | Build → Deploy → Monitoring agent collaboration |
+
+### Not suitable for
+
+- Modifying internal behavior of **pre-built AI tools** like Claude Code or Cursor (you don't control their internals)
+- Human-readable communication (this is designed for machines)
+
 ## Quick Start
 
 ```bash
 npm install
-npm test        # Run all 124 tests
-npm run demo    # Run 3-agent deployment demo
-npm run benchmark  # Run token efficiency benchmark
+npm test           # Run 124 tests
+npm run demo       # 3-agent deployment pipeline demo
+npm run benchmark  # Token efficiency measurement (GPT-4o tokenizer)
 ```
 
 ## Message Format
@@ -35,10 +65,10 @@ SENDER→RECEIVER:COMMAND:key:value|key2:value2
 # Simple command
 ACK
 
-# Routed request with payload
+# Routing + payload
 A→B:REQ:action:build|mode:prod
 
-# Broadcast error
+# Broadcast
 SYS→*:ERR:code:503|msg:service_down|retry:T
 
 # Nested data
@@ -46,31 +76,20 @@ DATA:users:[{name:alice,score:95},{name:bob,score:87}]
 
 # Multicast
 ORCH→[A,B,C]:REQ:action:vote|proposal:deploy_v2
+
+# Anycast (any one from a group)
+A→<WORKERS>:DO:task:render|id:42
 ```
 
-## Architecture
+## Features
 
-```
-src/
-├── types/       # Token types, AST nodes, message types
-├── lexer/       # Tokenizer
-├── parser/      # Recursive descent parser → AST
-├── encoder/     # AILMessage object → AI_Language string
-├── decoder/     # AI_Language string → AILMessage object
-├── validator/   # Syntax + semantic validation
-└── runtime/     # Multi-agent runtime
-    ├── agent.ts     # Agent abstraction
-    ├── router.ts    # Message routing (unicast/broadcast/multicast/anycast)
-    └── session.ts   # Session & context management
-```
-
-## API
+### 1. Parser (string ↔ object conversion)
 
 ```typescript
-import { encode, decode, validate, parse, Agent, Router } from './src';
+import { encode, decode, validate } from './src';
 
-// Encode a message
-const raw = encode({
+// Object → AI_Language string
+encode({
   sender: 'A',
   receiver: { type: 'single', id: 'B' },
   command: 'REQ',
@@ -78,42 +97,102 @@ const raw = encode({
 });
 // → "A→B:REQ:action:build|mode:prod"
 
-// Decode back
-const msg = decode('A→B:REQ:action:build|mode:prod');
+// AI_Language string → Object
+decode('A→B:REQ:action:build|mode:prod');
 // → { sender: 'A', receiver: {...}, command: 'REQ', payload: { action: 'build', mode: 'prod' } }
 
-// Validate
-const result = validate('A→B:REQ:action:build', { strictCommands: true });
+// Validation
+validate('A→B:REQ:action:build', { strictCommands: true });
 // → { valid: true, errors: [] }
-
-// Multi-agent routing
-const router = new Router();
-const a = new Agent({ id: 'A' });
-const b = new Agent({ id: 'B' });
-b.onMessage((msg) => console.log('B received:', msg));
-router.register(a);
-router.register(b);
-a.send({ receiver: { type: 'single', id: 'B' }, command: 'PING' });
 ```
 
-## Token Efficiency (GPT-4o)
+### 2. Multi-Agent Runtime
 
-| Scenario                     | NL   | AIL  | Saved     |
-|------------------------------|------|------|-----------|
-| Simple acknowledgment        | 19   | 4    | **78.9%** |
-| Error notification           | 46   | 18   | **60.9%** |
-| Configuration update         | 42   | 21   | **50.0%** |
-| **Overall (10 scenarios)**   | 376  | 223  | **40.7%** |
+Agent registration, message routing (unicast/broadcast/multicast/anycast), and session management.
 
-Full results: [docs/benchmark-results.md](docs/benchmark-results.md)
+```typescript
+import { Agent, Router, SessionManager } from './src';
 
-## Specification
+const router = new Router();
+const orchestrator = new Agent({ id: 'ORCH' });
+const builder = new Agent({ id: 'BUILD' });
+
+builder.onMessage((msg) => {
+  // Call LLM API, perform task, then respond
+  builder.send({
+    receiver: { type: 'single', id: 'ORCH' },
+    command: 'DONE',
+    payload: { task: 'build', status: 'ok' },
+  });
+});
+
+router.register(orchestrator);
+router.register(builder);
+
+// Send a message
+orchestrator.send({
+  receiver: { type: 'single', id: 'BUILD' },
+  command: 'DO',
+  payload: { task: 'build', src: 'frontend', mode: 'prod' },
+});
+```
+
+### 3. Extension System
+
+Register domain-specific custom commands via namespaces:
+
+```
+GAME.SPAWN:entity:npc|pos:[10,20]
+ML.TRAIN:model:bert|epochs:10
+DEPLOY.ROLLBACK:target:staging
+```
+
+## Token Efficiency (GPT-4o measured)
+
+| Scenario | NL Tokens | AIL Tokens | Reduction |
+|----------|-----------|------------|-----------|
+| Simple acknowledgment (ACK) | 19 | 4 | **78.9%** |
+| Error notification | 46 | 18 | **60.9%** |
+| Configuration update | 42 | 21 | **50.0%** |
+| Subscription request | 32 | 14 | **56.3%** |
+| Complex pipeline | 66 | 58 | **12.1%** |
+| **Overall (10 scenarios)** | **376** | **223** | **40.7%** |
+
+Details: [docs/benchmark-results.md](docs/benchmark-results.md)
+
+## Project Structure
+
+```
+src/
+├── types/       # Token types, AST nodes, message type definitions
+├── lexer/       # Tokenizer (string → token array)
+├── parser/      # Recursive descent parser (tokens → AST)
+├── encoder/     # Encoder (AILMessage object → string)
+├── decoder/     # Decoder (string → AILMessage object)
+├── validator/   # Syntax + semantic validator
+└── runtime/     # Multi-agent runtime
+    ├── agent.ts     # Agent abstraction
+    ├── router.ts    # Message routing
+    └── session.ts   # Session & context management
+
+tests/           # 124 tests (Vitest)
+demo/            # 3-agent deployment pipeline demo
+docs/spec/       # Language specification (grammar, commands, extensions, protocol, examples)
+```
+
+## Language Specification
 
 - [Grammar](docs/spec/grammar.md) — Message structure, delimiters, types, EBNF
 - [Commands](docs/spec/commands.md) — 30+ built-in commands, abbreviation rules
 - [Extensions](docs/spec/extensions.md) — Domain-specific namespaces, schema exchange
 - [Protocol](docs/spec/protocol.md) — Routing patterns, sessions, error handling
-- [Examples](docs/spec/examples.md) — Real-world scenarios with NL comparison
+- [Examples](docs/spec/examples.md) — Real-world scenarios + natural language comparison
+
+## Tech Stack
+
+- TypeScript, Node.js
+- Vitest (testing)
+- tiktoken (token counting)
 
 ## License
 
