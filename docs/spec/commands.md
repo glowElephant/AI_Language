@@ -85,6 +85,15 @@ SENDER→RECEIVER:COMMAND:payload
 | `SYNC`  | Sync state           | `SYNC:ctx:{step:3,total:10}`   |
 | `META`  | Metadata exchange    | `META:ext:game_v1\|schema:{…}` |
 
+### 2.9 Hybrid Mode (see hybrid.md)
+
+| Command  | Meaning                       | Usage                               |
+|----------|-------------------------------|-------------------------------------|
+| `REPORT` | Task report with NL details   | `REPORT:task:build\|cf:90`          |
+| `ISSUE`  | Problem report with NL detail | `ISSUE:sev:high\|area:auth`         |
+
+These commands are designed for hybrid messages (AIL header + `---` + NL body). They MAY be used in pure AIL mode without the NL body, but SHOULD include the body when `cf < 95`.
+
 ## 3. Command Naming Rules
 
 ### 3.1 Built-in Commands

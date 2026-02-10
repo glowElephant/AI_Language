@@ -249,7 +249,21 @@ function parse(raw):
     return Message(sender, receiver, command, payload)
 ```
 
-## 11. Examples
+## 11. Hybrid Mode Separator
+
+The sequence `---` (three hyphens on a standalone line) is reserved as the hybrid mode separator. It divides an AIL header from a natural language body:
+
+```
+DONE:task:build|cf:90
+---
+Build completed. Used incremental compilation to save time.
+```
+
+Within AIL payloads, literal `---` must be escaped as `\-\-\-` or quoted: `"---"`.
+
+See [hybrid.md](hybrid.md) for the full hybrid mode specification.
+
+## 12. Examples
 
 ### Simple command
 ```

@@ -186,6 +186,7 @@ docs/spec/       # Language specification (grammar, commands, extensions, protoc
 - [Commands](docs/spec/commands.md) — 30+ built-in commands, abbreviation rules
 - [Extensions](docs/spec/extensions.md) — Domain-specific namespaces, schema exchange
 - [Protocol](docs/spec/protocol.md) — Routing patterns, sessions, error handling
+- [Hybrid Mode](docs/spec/hybrid.md) — AIL + natural language hybrid for LLM agents
 - [Examples](docs/spec/examples.md) — Real-world scenarios + natural language comparison
 
 ## Tech Stack

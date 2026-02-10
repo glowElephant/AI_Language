@@ -158,7 +158,47 @@ B→A:ACK:sid:s1|received:8
 
 ---
 
-## 10. Quick Reference Card
+## 10. Hybrid Mode — LLM Multi-Agent Task Report
+
+### Scenario
+3 LLM agents collaborate on a codebase refactoring: `LEAD` (orchestrator), `WORKER_A`, `WORKER_B`
+
+### Pure AIL — Loses Critical Context (~8 tokens)
+```
+WORKER_A→LEAD:DONE:task:refactor_auth|status:ok|files:[auth.cs,session.cs]|issues:none
+```
+
+### Hybrid — Preserves Accuracy (~25 tokens, but correct)
+```
+WORKER_A→LEAD:DONE:task:refactor_auth|files:[auth.cs,session.cs]|cf:85
+---
+Refactored auth module to use JWT. The existing session.cs had an
+undocumented fallback to cookie-based auth on line 42. I preserved
+this behavior but it may conflict with the new JWT flow when both
+are active. Recommend reviewing the interaction before deploying.
+```
+
+### Why Hybrid Wins Here
+| Aspect               | Pure AIL        | Hybrid                          |
+|----------------------|-----------------|----------------------------------|
+| Status               | `issues:none`   | `cf:85` (signals uncertainty)    |
+| Hidden risk          | Lost            | Documented in NL body            |
+| Actionable info      | None            | "Review line 42 interaction"     |
+| Routing/automation   | Works           | Works (header is valid AIL)      |
+
+### Token Efficiency
+
+| Mode     | Tokens | Accuracy |
+|----------|--------|----------|
+| Pure NL  | ~50    | 100%     |
+| Hybrid   | ~25    | 100%     |
+| Pure AIL | ~8     | ~60%     |
+
+Hybrid achieves **50% reduction** vs NL while maintaining full accuracy.
+
+---
+
+## 11. Quick Reference Card
 
 ```
 # Message format

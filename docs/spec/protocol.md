@@ -280,3 +280,18 @@ SYS→A:EVT:topic:build.status|data:{step:compile,status:ok}
 | Broadcast  | Best-effort         | No ordering guarantee    |
 | Pipeline   | Sequential          | Each step waits for prev |
 | Stream     | Sequence-numbered   | Receiver reorders by seq |
+
+## 11. Hybrid Mode
+
+When agents are LLM-based, pure AIL may lose nuance for complex messages. Hybrid mode combines an AIL header with a natural language body, separated by `---`:
+
+```
+DONE:task:build|cf:85|files:[app.js,utils.js]
+---
+Build succeeded but 3 deprecation warnings in auth module.
+The warnings don't affect functionality but should be addressed before v2.
+```
+
+Hybrid mode is negotiated at session start (`hybrid:T` in HELLO) and supports configurable detail levels (`brief`, `std`, `verb`).
+
+See [hybrid.md](hybrid.md) for the full specification.
