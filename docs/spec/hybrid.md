@@ -370,3 +370,103 @@ A hybrid message is valid if:
 5. **AIL header should be self-sufficient for routing** — an agent that ignores the NL body should still be able to route and categorize the message
 6. **Don't duplicate** — information in the AIL header should NOT be repeated in the NL body
 7. **NL body adds, not restates** — the body provides context the header can't express
+
+## 12. Swarm Integration Pattern
+
+When multiple LLM agents work as a team (leader-worker swarm), hybrid mode is the default communication protocol.
+
+### 12.1 Swarm Roles
+
+| Role       | Communication Style                              |
+|------------|--------------------------------------------------|
+| Leader     | Sends tasks in NL (detailed prompts to workers)  |
+| Worker     | Reports back in HYBRID (structured + context)    |
+| Peer (W↔W) | Uses PURE for coordination, HYBRID for handoffs  |
+| Leader↔User| Pure natural language (human-readable)           |
+
+### 12.2 Worker Report Template
+
+Workers use this pattern when reporting task completion:
+
+```
+DONE:task:{id}|files:[{changed}]|cf:{0-100}
+---
+{What was done, any caveats, assumptions, or recommendations.
+2-5 sentences max.}
+```
+
+For errors or blockers:
+
+```
+ISSUE:task:{id}|sev:{low|med|high}|blocker:{T|F}
+---
+{Description of the problem, what was tried, suggested resolution.}
+```
+
+For progress updates:
+
+```
+SYNC:task:{id}|progress:{pct}|cur:{current_step}
+---
+{Optional context if something unexpected came up.}
+```
+
+### 12.3 When Workers Can Use PURE
+
+Workers MAY skip the NL body (use PURE mode) for:
+- Simple acknowledgments: `ACK:#task42`
+- Deterministic completions with no caveats: `DONE:task:build|status:ok|time:3s`
+- Status pings: `SYNC:status:idle`
+
+### 12.4 Compact Reference for Agent Prompts
+
+Include this block in swarm agent prompts to enable hybrid mode:
+
+```
+## Inter-agent communication: AI_Language Hybrid Mode
+Messages to teammates use AIL hybrid format:
+
+PURE (status/ack):     ACK | DONE:task:X|status:ok
+HYBRID (task report):  COMMAND:key:value|cf:N
+                       ---
+                       Natural language context, caveats, reasoning.
+
+Rules:
+- Status/metrics/file lists/flags → AIL header
+- Reasoning/caveats/assumptions/recommendations → NL body after ---
+- Include cf (confidence 0-100) when below 95
+- Keep NL body to 2-5 sentences
+```
+
+### 12.5 Real-World Example (Swarm Session)
+
+A leader distributes Phase 1-6 of a codebase refactor to 5 workers:
+
+```
+# Worker A completes with high confidence
+DONE:phase:1|files:[FlowNodes.cs,AnimationFlow.cs]|cf:98
+---
+Added InputPortConfig class and target fields to 7 action nodes.
+All existing Clone() methods updated. No breaking changes.
+
+# Worker B completes with caveat
+DONE:phase:2|files:[FlowExecutor.cs]|cf:85
+---
+Merge execution implemented with per-input DuplicateEventMode.
+When two branches arrive in the same frame, execution order depends
+on coroutine scheduling (non-deterministic). May need a priority
+tiebreaker if determinism is required.
+
+# Worker C hits a blocker
+ISSUE:phase:6|sev:high|blocker:T|file:ProjectImporter.cs
+---
+Legacy v1 format uses ComponentSettings keyed by type name, but
+the type was renamed in Phase 1. Need the old type name mapping
+to maintain backward compatibility. Requesting info from leader.
+
+# Worker D simple completion
+DONE:phase:3|files:[FlowNodeView.cs,AnimationFlowEditorWindow.cs]|cf:97
+
+# Leader acknowledges
+ACK:#phase3
+```
